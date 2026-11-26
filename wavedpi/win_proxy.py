@@ -18,6 +18,7 @@ from .core import MAX_RECORD, allowed_host, pipe, recv_exact, transform_record
 
 LOG = logging.getLogger('wave-dpi')
 MAX_HEADER = 16384
+HEALTH_PATH = b'GET /__wave_dpi_health HTTP/1.1'
 PROXY_HOST = '127.0.0.1'
 PROXY_PORT = 18888
 
@@ -100,6 +101,11 @@ def handle_client(client: socket.socket, cfg: dict) -> None:
     try:
         client.settimeout(10)
         header, trailing = read_headers(client)
+        if header.startswith(HEALTH_PATH + b'\r\n'):
+            body = b'WaveDPI/1\n'
+            client.sendall(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n' +
+                           f'Content-Length: {len(body)}\r\n\r\n'.encode('ascii') + body)
+            return
         method, host, port, rewritten = parse_request(header)
         upstream = connect_upstream(host, port, cfg)
         if method == 'CONNECT':

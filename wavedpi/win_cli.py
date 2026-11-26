@@ -101,9 +101,18 @@ def restore_proxy():
 
 
 def daemon_alive() -> bool:
+    """Verify the actual Wave DPI listener, not just an occupied TCP port."""
     try:
-        with socket.create_connection((PROXY_HOST, PROXY_PORT), timeout=.25):
-            return True
+        with socket.create_connection((PROXY_HOST, PROXY_PORT), timeout=.5) as client:
+            client.settimeout(.5)
+            client.sendall(b'GET /__wave_dpi_health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
+            data = bytearray()
+            while len(data) < 1024:
+                chunk = client.recv(1024 - len(data))
+                if not chunk:
+                    break
+                data.extend(chunk)
+            return b'WaveDPI/1\n' in data and data.startswith(b'HTTP/1.1 200 OK')
     except OSError:
         return False
 
@@ -114,6 +123,11 @@ def command_start():
             enable_proxy()
         return 'Уже запущен'
     HOME.mkdir(parents=True, exist_ok=True)
+    try:
+        with socket.create_connection((PROXY_HOST, PROXY_PORT), timeout=.25):
+            return 'Порт прокси занят другой программой. Отключи её или измени настройки.'
+    except OSError:
+        pass
     launch = Path(__file__).resolve().parents[1] / 'launch.py'
     # Use pythonw.exe to avoid a console window.
     binary = Path(sys.executable)
