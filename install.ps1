@@ -16,11 +16,12 @@ try {
     $checkout = Get-ChildItem $source -Directory | Select-Object -First 1
     if (-not $checkout) { throw 'Missing source directory in archive' }
     $py = $null
+    $pyCommand = $null
     foreach ($binary in @('python', 'py')) {
         if (Get-Command $binary -ErrorAction SilentlyContinue) {
             try {
                 $candidate = & $binary -c 'import sys; print(sys.executable)' 2>$null
-                if ($LASTEXITCODE -eq 0 -and (Test-Path $candidate)) { $py = $candidate; break }
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $candidate)) { $py = $candidate; $pyCommand = $binary; break }
             } catch {}
         }
     }
@@ -40,7 +41,16 @@ try {
     Copy-Item (Join-Path $checkout.FullName 'launch.py') (Join-Path $root 'launch.py') -Force
     Copy-Item (Join-Path $checkout.FullName 'wavedpi\*.py') (Join-Path $root 'wavedpi') -Force
     $runner = Join-Path $root 'wave-dpi.cmd'
-    $cmd = "@echo off`r`n`"$py`" `"$root\launch.py`" %*`r`n"
+    # Use Windows environment expansion to avoid corrupting non-ASCII user names
+    # inside batch files regardless of the machine's active code page.
+    if ($py -eq (Join-Path $root 'python\python.exe')) {
+        $interpreter = '"%LOCALAPPDATA%\WaveDPI\python\python.exe"'
+    } elseif ($pyCommand -eq 'python') {
+        $interpreter = 'python'
+    } else {
+        $interpreter = 'py -3'
+    }
+    $cmd = '@echo off' + "`r`n" + $interpreter + ' "%LOCALAPPDATA%\WaveDPI\launch.py" %*' + "`r`n"
     [IO.File]::WriteAllText($runner, $cmd, [Text.Encoding]::ASCII)
     $uninstall = Join-Path $root 'uninstall.ps1'
     Copy-Item (Join-Path $checkout.FullName 'uninstall.ps1') $uninstall -Force
