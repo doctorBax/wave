@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Manages exactly the iptables rule owned by this project.
+set -euo pipefail
+mode="${1:-}"
+chain='WAVE_DPI'
+uid="$(id -u wave-dpi)"
+rule=(-p tcp --dport 443 -m owner '!' --uid-owner "$uid" -j "$chain")
+case "$mode" in
+  on)
+    port="$(/usr/bin/python3 -c 'import json; print(json.load(open("/etc/wave-dpi/config.json"))["port"])')"
+    # The proxy must be listening before any traffic is redirected.
+    /usr/bin/python3 - "$port" <<'PY'
+import socket, sys, time
+port = int(sys.argv[1])
+for attempt in range(40):
+    try:
+        with socket.create_connection(('127.0.0.1', port), timeout=0.2):
+            sys.exit(0)
+    except OSError:
+        time.sleep(0.1)
+sys.exit('Wave DPI daemon did not start listening')
+PY
+    iptables -w -t nat -N "$chain" 2>/dev/null || true
+    iptables -w -t nat -F "$chain"
+    iptables -w -t nat -A "$chain" -j REDIRECT --to-ports "$port"
+    iptables -w -t nat -C OUTPUT "${rule[@]}" 2>/dev/null || iptables -w -t nat -I OUTPUT 1 "${rule[@]}"
+    ;;
+  off)
+    while iptables -w -t nat -C OUTPUT "${rule[@]}" 2>/dev/null; do
+      iptables -w -t nat -D OUTPUT "${rule[@]}"
+    done
+    iptables -w -t nat -F "$chain" 2>/dev/null || true
+    iptables -w -t nat -X "$chain" 2>/dev/null || true
+    ;;
+  *) echo 'usage: wave-dpi-net on|off' >&2; exit 2 ;;
+esac

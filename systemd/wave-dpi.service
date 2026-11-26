@@ -1,0 +1,23 @@
+[Unit]
+Description=Wave DPI local TLS record splitting proxy
+Documentation=https://github.com/doctorBax/wave
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=wave-dpi
+Group=wave-dpi
+ExecStart=/usr/bin/python3 /opt/wave-dpi/launch.py run-daemon
+# '+' applies only to network-rule helpers, daemon remains unprivileged.
+ExecStartPost=+/usr/local/libexec/wave-dpi-net on
+ExecStopPost=+/usr/local/libexec/wave-dpi-net off
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=10
+ProtectHome=true
+PrivateTmp=true
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target
