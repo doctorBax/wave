@@ -1,10 +1,10 @@
-name: Test
+name: Wave DPI tests
 on:
   push:
   pull_request:
   workflow_dispatch:
 jobs:
-  test:
+  linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,4 +13,21 @@ jobs:
           python-version: '3.12'
       - run: python -m unittest discover -s tests -v
       - run: python -m compileall -q wavedpi launch.py
-      - run: bash -n install.sh uninstall.sh scripts/wave-dpi-net
+      - run: bash -n install.sh uninstall.sh bootstrap.sh scripts/wave-dpi-net
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: pwsh
+        run: |
+          python -m unittest discover -s tests -v
+          python -m compileall -q wavedpi launch.py
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'install.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors) { throw ($errors | Out-String) }
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'uninstall.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors) { throw ($errors | Out-String) }
